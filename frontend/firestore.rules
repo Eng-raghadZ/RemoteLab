@@ -1,0 +1,31 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Full user profile, keyed by Firebase Auth UID.
+    // A signed-in user may read ONLY their own profile document.
+    // No client (authenticated or not) may create, update, or delete —
+    // accounts are provisioned exclusively via the Admin SDK
+    // (scripts/seedUsers.js today, a real backend in the future).
+    match /users/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow create, update, delete: if false;
+    }
+
+    // Minimal public directory: Student ID -> university email ONLY.
+    // This exists so the login form can resolve "202012345" to an email
+    // address before the user is authenticated (Firebase Auth requires
+    // an email to sign in). No other personal data is exposed here.
+    // Writes are Admin SDK only, same as `users`.
+    match /studentDirectory/{studentId} {
+      allow read: if true;
+      allow create, update, delete: if false;
+    }
+
+    // Deny everything else by default (defense in depth).
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

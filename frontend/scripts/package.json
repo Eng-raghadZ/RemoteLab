@@ -1,0 +1,11 @@
+{
+  "name": "remote-lab-admin-scripts",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "seed": "node seedUsers.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.0.0"
+  }
+}
