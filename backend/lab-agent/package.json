@@ -1,0 +1,21 @@
+{
+  "name": "remote-lab-agent",
+  "version": "1.0.0",
+  "description": "On-prem agent for the Remote Lab (PTUK) — bridges the API server to the physical SK 80386 trainer kit over the interface controller.",
+  "main": "src/index.js",
+  "private": true,
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "ws": "^8.17.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
