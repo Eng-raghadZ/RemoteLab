@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { loginWithIdentifier, AuthError } from "../firebase/auth";
 import { useTheme } from "../context/ThemeContext";
+import RigStatus from "../components/status/RigStatus";
 /**
  * Remote Lab for Microprocessors and Assembly Language — Landing Page
  * PTUK · Page 1
@@ -299,18 +300,6 @@ function HwItem({ label, sub, icon }) {
         <span className="rl-hw-label">{label}</span>
         <span className="rl-hw-sub">{sub}</span>
       </div>
-    </div>
-  );
-}
-
-function RigStatus() {
-  return (
-    <div className="rl-rig-status">
-      <span className="rl-led" aria-hidden="true" />
-      <span className="rl-rig-text">
-        Trainer kit online <span className="rl-rig-sep">·</span>
-      </span>
-      {/* <span className="rl-rig-mono">/dev/ttyLAB0</span> */}
     </div>
   );
 }
@@ -782,35 +771,6 @@ const css = `
 .rl-hw-label { font-size: 12.5px; font-weight: 700; color: var(--rl-ink); }
 .rl-hw-sub { font-size: 11px; color: var(--rl-muted); font-family: 'JetBrains Mono', monospace; }
 
-.rl-rig-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 12px;
-  color: var(--rl-muted);
-  padding: 10px 16px;
-  background: rgba(5, 18, 31, 0.55);
-  border: 1px solid rgba(63, 224, 197, 0.22);
-  clip-path: polygon(0 0, 100% 0, 100% 70%, 95% 100%, 0 100%);
-}
-.rl-light .rl-rig-status {
-  background: rgba(236, 233, 225, 0.85);
-  border-color: rgba(20, 118, 106, 0.28);
-}
-.rl-led {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--rl-cyan);
-  box-shadow: 0 0 8px var(--rl-cyan);
-  animation: rlBlink 1.8s ease-in-out infinite;
-}
-@media (prefers-reduced-motion: reduce) { .rl-led { animation: none; } }
-@keyframes rlBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
-.rl-rig-sep { color: rgba(159,179,204,0.4); }
-.rl-rig-mono { margin-left: auto; color: var(--rl-cyan); }
-
 /* ---------- login card ---------- */
 .rl-hero-right { position: sticky; top: 110px; }
 .rl-login-card {
@@ -1000,7 +960,6 @@ const css = `
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .rl-led { animation: none; }
   // .rl-main {
   // background-image: url(images/background4k.png);}
 }

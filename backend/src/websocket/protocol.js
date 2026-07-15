@@ -24,7 +24,7 @@ const AGENT_CAMERA_FRAME = 'camera_frame'; // { jobId, mimeType, data (base64), 
 // --- Server -> Agent ---
 const SERVER_HELLO_ACK = 'hello_ack'; // { ok: true }
 const SERVER_HELLO_REJECTED = 'hello_rejected'; // { reason }
-const SERVER_JOB_DISPATCH = 'job_dispatch'; // { jobId, fileName, downloadUrl }
+const SERVER_JOB_DISPATCH = 'job_dispatch'; // { jobId, fileName, content }
 const SERVER_ABORT_JOB = 'abort_job'; // { jobId, reason: 'timeout' | 'terminated_by_user' }
 const SERVER_HEARTBEAT_ACK = 'heartbeat_ack'; // {}
 

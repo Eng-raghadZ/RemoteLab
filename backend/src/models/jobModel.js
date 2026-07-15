@@ -23,9 +23,9 @@ function getDb() {
 
 /**
  * Creates a new job in the "queued" state. Called right after the .asm file
- * has been validated and stored in Firebase Storage.
+ * has been validated.
  */
-async function createJob({ studentUid, studentEmail, fileName, storagePath }) {
+async function createJob({ studentUid, studentEmail, fileName, asmContent }) {
   const admin = initFirebaseAdmin();
   const db = getDb();
 
@@ -35,7 +35,11 @@ async function createJob({ studentUid, studentEmail, fileName, storagePath }) {
     studentUid,
     studentEmail: studentEmail || null,
     fileName,
-    storagePath,
+    // The Assembly source itself, stored directly on the job document —
+    // see jobs.controller.js::submitJob for why this replaced a separate
+    // Firebase Storage object. Delivered to the Lab Agent inline over
+    // /ws/agent (see websocket/agentHub.js::attemptDispatch).
+    asmContent,
     status: JOB_STATUS.QUEUED,
     submittedAt: admin.firestore.FieldValue.serverTimestamp(),
     startedAt: null,
@@ -190,4 +194,3 @@ module.exports = {
   markJobRunning,
   endJob,
 };
-

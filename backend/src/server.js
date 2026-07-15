@@ -6,6 +6,7 @@ const cors = require('cors');
 const morgan = require('morgan');
 
 const jobsRouter = require('./routes/jobs.routes');
+const statusRouter = require('./routes/status.routes');
 const { notFoundHandler, errorHandler } = require('./middleware/errorHandler');
 const { attachWebSocketServers } = require('./websocket/wsServer');
 
@@ -21,6 +22,12 @@ app.use(express.json());
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'remote-lab-api', timestamp: new Date().toISOString() });
 });
+
+// Public, unauthenticated rig snapshot — this is what powers the landing
+// page's "Trainer kit online" indicator for signed-out visitors. See
+// controllers/status.controller.js for exactly what it does (and
+// doesn't) expose.
+app.use('/api/status', statusRouter);
 
 app.use('/api/jobs', jobsRouter);
 

@@ -35,29 +35,24 @@ function start(config) {
   }
 
   async function handleJobDispatch(message) {
-    const { jobId, fileName, downloadUrl } = message;
+    const { jobId, fileName, content } = message;
     console.log(`[lab-agent] Job ${jobId} dispatched (${fileName})`);
 
-    let fileBuffer;
-    try {
-      const response = await fetch(downloadUrl);
-      if (!response.ok) {
-        throw new Error(`Download failed with status ${response.status}`);
-      }
-      const arrayBuffer = await response.arrayBuffer();
-      fileBuffer = Buffer.from(arrayBuffer);
-    } catch (err) {
-      console.error(`[lab-agent] Failed to download job ${jobId}:`, err);
-      send(AGENT_JOB_ERROR, { jobId, message: 'Lab Agent could not download the program file.' });
+    if (typeof content !== 'string') {
+      console.error(`[lab-agent] Job ${jobId} dispatch arrived with no file content.`);
+      send(AGENT_JOB_ERROR, { jobId, message: 'Lab Agent did not receive the program file.' });
       return;
     }
+
+    // The .asm source travels inline in the dispatch message itself (see
+    // agentHub.js::attemptDispatch) instead of being downloaded from a
+    // signed Firebase Storage URL — one less network hop, and one less
+    // thing that can fail (expired URL, bucket misconfiguration, etc).
+    const fileBuffer = Buffer.from(content, 'utf8');
 
     trainerKit.startExecution(jobId, fileBuffer, {
       onStarted: () => {
         send(AGENT_JOB_STARTED, { jobId });
-        // Camera session is defined entirely by the execution window — it
-        // starts the moment the program starts running, full stop, no
-        // separate reservation of its own.
         cameraCapture.start(jobId, (frame) => send(AGENT_CAMERA_FRAME, { jobId, ...frame }));
       },
       onCompleted: (resultSummary) => {

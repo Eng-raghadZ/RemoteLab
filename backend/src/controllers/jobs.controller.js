@@ -1,5 +1,3 @@
-const { v4: uuidv4 } = require('uuid');
-const { initFirebaseAdmin } = require('../config/firebaseAdmin');
 const { validateAsmFile } = require('../utils/validateAsmFile');
 const { serializeJob, toIsoOrNull } = require('../utils/serializeJob');
 const jobModel = require('../models/jobModel');
@@ -8,8 +6,13 @@ const agentHub = require('../websocket/agentHub');
 /**
  * POST /api/jobs
  * Accepts a multipart upload (field name "program"), validates it's a
- * non-empty .asm file, stores it in Firebase Storage, and appends a new
- * job to the execution queue.
+ * non-empty .asm file, and appends a new job to the execution queue.
+ *
+ * The .asm source itself is stored as a field directly on the job's
+ * Firestore document (see jobModel.js::createJob) rather than as a
+ * separate Firebase Storage object — it's capped at 256 KB by
+ * validateAsmFile.js, comfortably inside Firestore's 1 MiB per-document
+ * limit, so there's no need for a Storage bucket at all.
  */
 async function submitJob(req, res, next) {
   try {
@@ -18,28 +21,13 @@ async function submitJob(req, res, next) {
       return res.status(400).json({ error: reason });
     }
 
-    const admin = initFirebaseAdmin();
-    const bucket = admin.storage().bucket();
-
-    const safeFileName = req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const storagePath = `asm-uploads/${req.user.uid}/${uuidv4()}-${safeFileName}`;
-
-    const fileRef = bucket.file(storagePath);
-    await fileRef.save(req.file.buffer, {
-      contentType: 'text/plain',
-      metadata: {
-        metadata: {
-          studentUid: req.user.uid,
-          originalName: req.file.originalname,
-        },
-      },
-    });
+    const asmContent = req.file.buffer.toString('utf8');
 
     const jobId = await jobModel.createJob({
       studentUid: req.user.uid,
       studentEmail: req.user.email,
       fileName: req.file.originalname,
-      storagePath,
+      asmContent,
     });
 
     const queueInfo = await jobModel.getQueuePositionForJob(jobId);

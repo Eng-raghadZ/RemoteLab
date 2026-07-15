@@ -1,6 +1,5 @@
 const jobModel = require('../models/jobModel');
 const clientHub = require('./clientHub');
-const { getSignedDownloadUrl } = require('../utils/storage');
 const { EXECUTION_TIMEOUT_MS, DISPATCH_ACK_TIMEOUT_MS, AGENT_SHARED_SECRET } = require('../config/constants');
 const {
   AGENT_HELLO,
@@ -17,15 +16,9 @@ const {
   SERVER_HEARTBEAT_ACK,
 } = require('./protocol');
 
-// Exactly one Lab Agent should ever be connected — there's exactly one
-// physical rig. This module's state reflects that: a single connection,
-// not a collection.
 const state = {
   socket: null,
   currentJobId: null,
-  // Cached alongside currentJobId so camera frames (which can arrive many
-  // times per second) don't need a Firestore read each time just to find
-  // out who to relay them to.
   currentStudentUid: null,
   dispatchInFlight: false,
   executionTimer: null,
@@ -56,8 +49,6 @@ function clearDispatchAckTimer() {
 }
 
 async function broadcastQueueSnapshot() {
-  // Never let a Firestore hiccup here crash the process — this runs on
-  // nearly every agent/job event, so it needs to fail soft.
   try {
     const queue = await jobModel.getQueueSnapshot();
     const running = queue.find((job) => job.status === jobModel.JOB_STATUS.RUNNING) || null;
@@ -72,21 +63,9 @@ async function broadcastQueueSnapshot() {
   }
 }
 
-/**
- * Attempts to dispatch the next queued job to the Lab Agent, if:
- *  - the agent is connected
- *  - nothing is already running or mid-dispatch
- *  - there IS a queued job
- * Safe to call opportunistically from many places (after a new job is
- * submitted, after a job ends, right when the agent connects, etc).
- */
 async function attemptDispatch() {
   if (!isAgentOnline() || state.dispatchInFlight) return;
 
-  // The whole body is wrapped — this function is called fire-and-forget
-  // (no await/catch at the call site) from the submit-job controller, from
-  // timers, and from several places below, so nothing in here may throw
-  // uncaught.
   try {
     const running = await jobModel.hasRunningJob();
     if (running) return;
@@ -97,19 +76,17 @@ async function attemptDispatch() {
     state.dispatchInFlight = true;
     state.currentJobId = nextJob.id;
 
-    const downloadUrl = await getSignedDownloadUrl(nextJob.storagePath);
-
+    // The file content travels directly in this message now — no signed
+    // Storage URL to generate, and no separate download step for the Lab
+    // Agent (see wsClient.js::handleJobDispatch).
     send(SERVER_JOB_DISPATCH, {
       jobId: nextJob.id,
       fileName: nextJob.fileName,
-      downloadUrl,
+      content: nextJob.asmContent,
     });
 
     state.dispatchAckTimer = setTimeout(async () => {
       try {
-        // Lab Agent never confirmed it started the job — treat as a
-        // failed dispatch, free the slot, and let the next attempt
-        // (triggered elsewhere) pick up the queue rather than retry-loop.
         console.error(`[agentHub] Dispatch ack timeout for job ${nextJob.id}`);
         await jobModel.endJob(nextJob.id, {
           status: jobModel.JOB_STATUS.ERROR,
@@ -138,19 +115,13 @@ async function attemptDispatch() {
   }
 }
 
-/**
- * Shared by both termination paths from the policy: session timeout and
- * manual stop. The queue/software state moves on immediately — we don't
- * block the student on hardware acknowledgment — while still telling the
- * agent (best-effort) to actually stop the rig.
- */
 async function endActiveJob(jobId, { status, endReason }) {
   clearExecutionTimer();
 
   try {
     const job = await jobModel.getJobById(jobId);
     if (!job || (job.status !== jobModel.JOB_STATUS.RUNNING && job.status !== jobModel.JOB_STATUS.QUEUED)) {
-      return; // already ended (e.g. completed just before the timeout fired)
+      return;
     }
 
     await jobModel.endJob(jobId, { status, endReason });
@@ -169,10 +140,6 @@ async function endActiveJob(jobId, { status, endReason }) {
   }
 }
 
-/**
- * Called by the REST layer when a student manually stops their own
- * execution (Manual Session Termination in the policy).
- */
 async function requestManualTermination(jobId) {
   await endActiveJob(jobId, {
     status: jobModel.JOB_STATUS.TERMINATED_BY_USER,
@@ -270,10 +237,6 @@ async function onJobError(jobId, message) {
   }
 }
 
-/**
- * Called by wsServer.js for every new connection on /ws/agent. The first
- * message must be AGENT_HELLO with the shared secret.
- */
 function handleConnection(ws) {
   let authenticated = false;
   ws.isAlive = true;
@@ -290,10 +253,6 @@ function handleConnection(ws) {
       return;
     }
 
-    // Everything below can hit Firestore/Storage — wrap the whole handler
-    // so a transient failure (e.g. credentials misconfigured, network
-    // blip) logs and drops this one message instead of crashing the
-    // process and taking down every other connection with it.
     try {
       if (!authenticated) {
         if (message.type !== AGENT_HELLO) return;
@@ -304,8 +263,6 @@ function handleConnection(ws) {
           return;
         }
 
-        // Replace any stale prior connection (e.g. agent reconnecting
-        // after a network blip) rather than allowing two.
         if (state.socket && state.socket !== ws) {
           state.socket.close();
         }
@@ -332,15 +289,9 @@ function handleConnection(ws) {
           await onJobError(message.jobId, message.message);
           break;
         case AGENT_JOB_ABORTED:
-          // Courtesy ack that the rig actually stopped — software state
-          // was already updated when the abort was issued, so just log.
           console.log(`[agentHub] Agent confirmed abort for job ${message.jobId}`);
           break;
         case AGENT_CAMERA_FRAME:
-          // Guard against frames arriving just after a job ended (e.g. a
-          // straggler in flight when the timeout fired) — the camera
-          // session is bounded by the same window as execution, so once
-          // currentJobId no longer matches, silently drop it.
           if (message.jobId === state.currentJobId && state.currentStudentUid) {
             clientHub.sendCameraFrame(state.currentStudentUid, {
               jobId: message.jobId,
@@ -368,11 +319,6 @@ function handleConnection(ws) {
   });
 }
 
-/**
- * Periodic liveness sweep for the agent connection specifically — a
- * silently-dead on-prem connection is worse here than for a browser tab,
- * since it means the rig looks "online" while actually unreachable.
- */
 function startHeartbeatSweep(intervalMs = 30000) {
   return setInterval(() => {
     if (!state.socket) return;

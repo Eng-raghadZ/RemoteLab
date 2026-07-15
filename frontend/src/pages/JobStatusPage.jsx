@@ -4,13 +4,19 @@
 // successful upload (see UploadCard.jsx / UploadSuccess.jsx).
 //
 // Polls GET /api/jobs/:jobId every few seconds until the job reaches a
-// terminal state. This polling is an interim mechanism — real-time
-// /ws/client integration (next on the roadmap) will replace it with a
-// push-based update instead, without changing anything else on this page.
+// terminal state — this remains as a fallback. Per
+// remote-lab-full-workflow.md §8 ("very next step"), this page now also
+// subscribes to job_status_changed over /ws/client (RealtimeContext) and
+// refetches immediately the moment a push arrives, so updates are
+// effectively instant whenever the realtime connection is up; polling
+// only carries the page if that socket is ever down.
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import PageShell from "../components/layout/PageShell";
+import LiveCameraView from "../components/camera/LiveCameraView";
+import ResultsPanel from "../components/results/ResultsPanel";
+import { useRealtime } from "../context/RealtimeContext";
 import { getJobStatus, JobServiceError } from "../services/jobService";
 
 const POLL_INTERVAL_MS = 4000;
@@ -45,6 +51,7 @@ function formatTimestamp(iso) {
 export default function JobStatusPage() {
   const { jobId } = useParams();
   const navigate = useNavigate();
+  const { subscribe: subscribeRealtime } = useRealtime();
 
   const [job, setJob] = useState(null);
   const [loadState, setLoadState] = useState("loading"); // loading | ready | error
@@ -84,6 +91,21 @@ export default function JobStatusPage() {
       if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
     };
   }, [fetchStatus]);
+
+  // Realtime push: the moment the backend reports this job's status
+  // changed, cancel whatever poll is pending and refetch right away
+  // instead of waiting up to POLL_INTERVAL_MS.
+  useEffect(() => {
+    const unsubscribe = subscribeRealtime("job_status_changed", (message) => {
+      if (message.jobId !== jobId) return;
+      if (pollTimeoutRef.current) {
+        clearTimeout(pollTimeoutRef.current);
+        pollTimeoutRef.current = null;
+      }
+      fetchStatus();
+    });
+    return unsubscribe;
+  }, [jobId, subscribeRealtime, fetchStatus]);
 
   const meta = job ? STATUS_META[job.status] || { label: job.status, tone: "info" } : null;
 
@@ -133,10 +155,14 @@ export default function JobStatusPage() {
               )}
 
               {job.status === "running" && (
-                <p className="js-inline-note">
-                  Your program is executing on the trainer kit right now. Live camera view is
-                  coming soon — this page will update automatically when it finishes.
-                </p>
+                <>
+                  <p className="js-inline-note">
+                    Your program is executing on the trainer kit right now. The live camera feed
+                    below updates in real time; this page will also update automatically when it
+                    finishes.
+                  </p>
+                  <LiveCameraView jobId={job.id} />
+                </>
               )}
 
               {job.status === "completed" && (
@@ -185,12 +211,7 @@ export default function JobStatusPage() {
                 </div>
               </dl>
 
-              {job.resultRef && (
-                <div className="js-result-preview">
-                  <span className="js-result-label">Result data</span>
-                  <pre className="js-result-pre">{job.resultRef}</pre>
-                </div>
-              )}
+              <ResultsPanel resultRef={job.resultRef} />
 
               <div className="js-actions">
                 <Link to="/dashboard" className="js-btn-ghost">
@@ -330,34 +351,6 @@ const pageCss = `
   font-family: 'JetBrains Mono', monospace;
   font-size: 12.5px;
 }
-
-/* ---------- result preview ---------- */
-.js-result-preview { margin: 0 0 24px; }
-.js-result-label {
-  display: block;
-  font-size: 11.5px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--rl-muted);
-  margin-bottom: 8px;
-}
-.js-result-pre {
-  margin: 0;
-  padding: 14px 16px;
-  background: rgba(5, 14, 26, 0.5);
-  border: 1px solid rgba(63, 224, 197, 0.16);
-  clip-path: polygon(0 0, 100% 0, 100% 92%, 97% 100%, 0 100%);
-  color: var(--rl-ink);
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 12px;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 220px;
-  overflow-y: auto;
-}
-.rl-light .js-result-pre { background: rgba(230, 227, 219, 0.7); border-color: rgba(36, 51, 63, 0.14); }
 
 /* ---------- actions ---------- */
 .js-actions { display: flex; gap: 12px; }

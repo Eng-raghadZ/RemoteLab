@@ -16,12 +16,21 @@ function toIsoOrNull(value) {
 
 /**
  * Returns a shallow copy of a job with submittedAt/startedAt/completedAt
- * normalized to ISO strings. Safe to call on null/undefined.
+ * normalized to ISO strings, and asmContent stripped out. Safe to call on
+ * null/undefined.
+ *
+ * asmContent (the full uploaded .asm source, see jobModel.js::createJob)
+ * is needed by the Lab Agent, which receives it directly over /ws/agent
+ * (agentHub.js::attemptDispatch) — never through this HTTP API. The
+ * frontend only ever displays fileName, so including the full source in
+ * every job-status response here would just double the payload size for
+ * no benefit.
  */
 function serializeJob(job) {
   if (!job) return job;
+  const { asmContent, ...rest } = job;
   return {
-    ...job,
+    ...rest,
     submittedAt: toIsoOrNull(job.submittedAt),
     startedAt: toIsoOrNull(job.startedAt),
     completedAt: toIsoOrNull(job.completedAt),

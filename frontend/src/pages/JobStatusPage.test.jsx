@@ -15,6 +15,17 @@ vi.mock("../firebase/auth", () => ({
   logout: vi.fn(),
 }));
 
+// RealtimeContext is exercised separately (it has no unit tests of its
+// own here); for JobStatusPage's purposes a no-op subscribe is enough —
+// it just means the polling fallback is what drives these tests, exactly
+// as before this feature was added.
+vi.mock("../context/RealtimeContext", () => ({
+  useRealtime: () => ({
+    subscribe: () => () => {},
+    connectionState: "closed",
+  }),
+}));
+
 vi.mock("./../services/jobService", () => ({
   getJobStatus: vi.fn(),
   JobServiceError: class JobServiceError extends Error {
@@ -71,7 +82,7 @@ describe("JobStatusPage", () => {
     expect(screen.getByText("2")).toBeInTheDocument();
   });
 
-  it("shows the running state with a live-view note", async () => {
+  it("shows the running state with the live camera view", async () => {
     getJobStatus.mockResolvedValue({
       id: "job-2",
       status: "running",
@@ -84,10 +95,14 @@ describe("JobStatusPage", () => {
     renderAtJob("job-2");
 
     expect(await screen.findByText("Running")).toBeInTheDocument();
-    expect(screen.getByText(/Live camera view is coming soon/i)).toBeInTheDocument();
+    expect(screen.getByText(/live camera feed below updates in real time/i)).toBeInTheDocument();
+    expect(screen.getByText("Live Camera")).toBeInTheDocument();
+    // No frame has arrived (subscribe is a no-op in this test), so the
+    // placeholder state should be showing.
+    expect(screen.getByText(/Connecting to live feed…/i)).toBeInTheDocument();
   });
 
-  it("shows the completed state with result data when available", async () => {
+  it("shows the completed state with structured result data when available", async () => {
     getJobStatus.mockResolvedValue({
       id: "job-3",
       status: "completed",
@@ -95,13 +110,17 @@ describe("JobStatusPage", () => {
       submittedAt: "2026-07-11T10:00:00.000Z",
       startedAt: "2026-07-11T10:01:00.000Z",
       completedAt: "2026-07-11T10:02:00.000Z",
-      resultRef: '{"registers":{"AX":"0004"}}',
+      resultRef: '{"registers":{"AX":"0004"},"executionTimeMs":1500,"note":"Simulated result."}',
     });
 
     renderAtJob("job-3");
 
     expect(await screen.findByText("Completed", { selector: ".js-status-badge" })).toBeInTheDocument();
-    expect(screen.getByText(/"AX":"0004"/)).toBeInTheDocument();
+    expect(screen.getByText("Execution Results")).toBeInTheDocument();
+    expect(screen.getByText("AX")).toBeInTheDocument();
+    expect(screen.getByText("0004")).toBeInTheDocument();
+    expect(screen.getByText("1.5s")).toBeInTheDocument();
+    expect(screen.getByText("Simulated result.")).toBeInTheDocument();
   });
 
   it("shows the error state with the server's error message", async () => {

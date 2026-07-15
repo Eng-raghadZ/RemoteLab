@@ -36,17 +36,17 @@ const db = admin.firestore();
 
 const INITIAL_USERS = [
   {
-    studentId: "202012345",
-    email: "student1@ptuk.edu.ps",
-    password: "Student@123",
+    studentId: "202210660",
+    email: "raghadziyad@ptuk.edu.ps",
+    password: "Raghad1234@",
     fullName: "Student One",
     role: "student",
     active: true,
   },
   {
-    studentId: "202012346",
-    email: "student2@ptuk.edu.ps",
-    password: "Student@123",
+    studentId: "202210189",
+    email: "halaomary@ptuk.edu.ps",
+    password: "Hala1234@",
     fullName: "Student Two",
     role: "student",
     active: true,
